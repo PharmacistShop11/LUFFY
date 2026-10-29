@@ -1,0 +1,93 @@
+name: Update TODO README
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Rebuild complete TODO list from Python sources
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          title = "### 📝 Complete TODO List"
+          entries = []
+
+          for path in Path(".").rglob("*.py"):
+              if ".git" in path.parts or not path.is_file():
+                  continue
+
+              text = path.read_text()
+              for line_number, line in enumerate(text.splitlines(), start=1):
+                  comment_start = line.find("#")
+                  if comment_start < 0:
+                      continue
+
+                  comment = line[comment_start + 1 :].strip()
+                  if not comment.startswith("TODO"):
+                      continue
+
+                  message = comment[len("TODO") :].strip()
+                  if message.startswith(":"):
+                      message = message[1:].strip()
+
+                  entries.append((path.as_posix(), line_number, message))
+
+          entries.sort(key=lambda item: (item[0], item[1]))
+          todo_text = "\n".join(
+              f"- [ ] **{path}:{line}** - {message}"
+              for path, line, message in entries
+          )
+
+          readme = Path("README.md")
+          content = readme.read_text()
+          start = content.index(title)
+          section_end = content.index("\n## ", start)
+          updated_content = (
+              content[:start]
+              + title
+              + "\n\n"
+              + todo_text
+              + "\n\n"
+              + content[section_end + 1 :]
+          )
+
+          assert updated_content.count(title) == 1
+          assert "## 🤝 Contributing" in updated_content
+          readme.write_text(updated_content)
+
+          workflow = Path(".github/workflows/update-todo-readme.yml")
+          if workflow.exists():
+              workflow.unlink()
+
+          print(f"Collected {len(entries)} TODO entries.")
+          for path, line, message in entries:
+              if path in {
+                  "luffy/deepscaler/utils.py",
+                  "luffy/verl/verl/protocol.py",
+              }:
+                  print(f"{path}:{line}: {message}")
+          PY
+
+      - name: Commit and push README update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .github/workflows/update-todo-readme.yml
+          git diff --cached --stat
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: update complete TODO list"
+            git push origin dev
+          else
+            echo "No README changes were needed."
+          fi
