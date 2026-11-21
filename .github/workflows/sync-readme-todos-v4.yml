@@ -1,0 +1,38 @@
+name: Sync README TODO List V4
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+permissions:
+  contents: write
+concurrency:
+  group: sync-readme-todos-v4-dev
+  cancel-in-progress: false
+jobs:
+  sync-readme:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout dev and main
+        run: |
+          git clone --no-tags --depth 30 -b dev "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .
+          git fetch --no-tags --depth 30 origin main:refs/remotes/origin/main
+      - name: Regenerate README TODO rows from source markers
+        run: python3 .github/scripts/sync_todos_complete_v4.py
+      - name: Commit README and remove one-shot helper files
+        shell: bash
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          mapfile -t HELPERS < <(git diff --name-only --diff-filter=A main..HEAD -- .github/workflows .github/scripts | sort -u)
+          printf '[cleanup] helper candidates: %s\n' "${HELPERS[*]}"
+          for helper in "${HELPERS[@]}"; do
+            if [ -f "$helper" ]; then git rm -qf "$helper"; fi
+          done
+          git add -A .github
+          if git diff --cached --quiet; then echo NO_CHANGE; exit 0; fi
+          git commit -m "docs(readme): sync Complete TODO List with dev source markers"
+          git push origin HEAD:dev
