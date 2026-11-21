@@ -1,0 +1,41 @@
+name: Sync README TODO List
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-readme-todos-dev
+  cancel-in-progress: false
+
+jobs:
+  sync-readme:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout dev branch and main ref
+        run: |
+          git clone --no-tags --depth 30 -b dev "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .
+          git fetch --no-tags --depth 30 origin main:refs/remotes/origin/main
+
+      - name: Regenerate TODO section from dev code markers
+        run: python3 .github/scripts/sync_todo_readme.py
+
+      - name: Commit README update and remove one-shot helper files
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          rm -f .github/scripts/sync_todo_readme.py
+          rm -f .github/workflows/sync-readme-todos.yml
+          git add -A .github
+          if git diff --cached --quiet; then
+            echo "NO_CHANGE"; exit 0
+          fi
+          git commit -m "docs(readme): restore and renumber dev TODO groups in Complete TODO List"
+          git push origin HEAD:dev
