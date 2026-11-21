@@ -1,0 +1,17 @@
+name: Diagnose README TODO V4
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/diagnose-todo-v4.yml']
+  workflow_dispatch:
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        run: |
+          git clone --no-tags --depth 30 -b dev "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" .
+          git fetch --no-tags --depth 30 origin main:refs/remotes/origin/main
+      - name: Diagnose README TODO formatting
+        run: python3 .github/scripts/diagnose_todo_readme_v4.py
